@@ -1,34 +1,19 @@
 package uk.gov.justice.services.event.buffer.core.service;
 
-import static co.unruly.matchers.StreamMatchers.contains;
-import static co.unruly.matchers.StreamMatchers.empty;
-import static java.util.Optional.of;
-import static java.util.UUID.randomUUID;
-import static javax.json.Json.createObjectBuilder;
+import static java.util.stream.Stream.of;
 import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
-import static uk.gov.justice.services.messaging.JsonEnvelope.envelopeFrom;
-import static uk.gov.justice.services.messaging.JsonEnvelope.metadataBuilder;
 
-import uk.gov.justice.services.event.buffer.core.repository.streambuffer.EventBufferEvent;
-import uk.gov.justice.services.event.buffer.core.repository.streambuffer.EventBufferJdbcRepository;
-import uk.gov.justice.services.event.buffer.core.repository.subscription.StreamStatusJdbcRepository;
-import uk.gov.justice.services.event.buffer.core.repository.subscription.Subscription;
 import uk.gov.justice.services.messaging.JsonEnvelope;
-import uk.gov.justice.services.messaging.JsonObjectEnvelopeConverter;
-import uk.gov.justice.services.test.utils.common.stream.StreamCloseSpy;
 
-import java.util.UUID;
 import java.util.stream.Stream;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
@@ -37,315 +22,86 @@ import org.slf4j.Logger;
 @RunWith(MockitoJUnitRunner.class)
 public class ConsecutiveEventBufferServiceTest {
 
-    public static final String EVENT_LISTENER = "EVENT_LISTENER";
     @Mock
-    @SuppressWarnings("unused")
+    private EventBufferAccessor eventBufferAccessor;
+
+    @Mock
+    private IncomingEventConverter incomingEventConverter;
+
+    @Mock
+    private CurrentPositionProvider currentPositionProvider;
+
+    @Mock
+    private EventOrderResolver eventOrderResolver;
+
+    @Mock
     private Logger logger;
 
-    @Mock
-    private StreamStatusJdbcRepository streamStatusJdbcRepository;
-
-    @Mock
-    private EventBufferJdbcRepository streamBufferRepository;
-
-    @Mock
-    private JsonObjectEnvelopeConverter jsonObjectEnvelopeConverter;
-
     @InjectMocks
-    private ConsecutiveEventBufferService bufferService;
+    private ConsecutiveEventBufferService consecutiveEventBufferService;
 
+    @Test
+    public void shouldGetAllCurrentBufferedEventsIfTheIncomingEventIsInOrder() throws Exception {
 
-    @Test(expected = IllegalStateException.class)
-    public void shouldThrowExceptionIfNoStreamId() {
+        final String component = "EVENT_LISTENER";
+        final long currentPositionInStream = 23;
 
+        final JsonEnvelope incomingEventEnvelope = mock(JsonEnvelope.class);
+        final JsonEnvelope nextEventInBuffer = mock(JsonEnvelope.class);
+        final IncomingEvent incomingEvent = mock(IncomingEvent.class);
 
-        final JsonEnvelope event = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName("my-event").withPosition(1L),
-                createObjectBuilder()
-        );
+        final Stream<JsonEnvelope> bufferedEvents = of(incomingEventEnvelope, nextEventInBuffer);
 
-        bufferService.currentOrderedEventsWith(event, EVENT_LISTENER);
-    }
+        when(incomingEventConverter.asIncomingEvent(incomingEventEnvelope, component)).thenReturn(incomingEvent);
+        when(currentPositionProvider.getCurrentPositionInStream(incomingEvent)).thenReturn(currentPositionInStream);
 
-    @Test(expected = IllegalStateException.class)
-    public void shouldNotAllowZeroVersion() {
+        when(eventOrderResolver.incomingEventObsolete(incomingEvent, currentPositionInStream)).thenReturn(false);
+        when(eventOrderResolver.incomingEventNotInOrder(incomingEvent, currentPositionInStream)).thenReturn(false);
 
-        final JsonEnvelope event = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName("my-event").withPosition(0L),
-                createObjectBuilder()
-        );
+        when(eventBufferAccessor.appendConsecutiveBufferedEventsTo(incomingEvent)).thenReturn(bufferedEvents);
 
-        bufferService.currentOrderedEventsWith(event, EVENT_LISTENER);
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void shouldNotAllowNullVersion() {
-
-        final JsonEnvelope event = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName("my-event"),
-                createObjectBuilder()
-        );
-        bufferService.currentOrderedEventsWith(event, EVENT_LISTENER);
+        assertThat(consecutiveEventBufferService.currentOrderedEventsWith(incomingEventEnvelope, component), is(bufferedEvents));
     }
 
     @Test
-    public void shouldIgnoreObsoleteEvent() {
+    public void shouldReturnEmptyAndBufferTheEventIfTheIncomingEventIsNotInOrder() throws Exception {
 
-        final UUID streamId = randomUUID();
-        final String source = "source";
-        final String eventName = "source.event.name";
+        final String component = "EVENT_LISTENER";
+        final long currentPositionInStream = 23;
 
-        final Subscription subscription = mock(Subscription.class);
+        final JsonEnvelope incomingEventEnvelope = mock(JsonEnvelope.class);
+        final IncomingEvent incomingEvent = mock(IncomingEvent.class);
 
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, EVENT_LISTENER)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(4L);
+        when(incomingEventConverter.asIncomingEvent(incomingEventEnvelope, component)).thenReturn(incomingEvent);
+        when(currentPositionProvider.getCurrentPositionInStream(incomingEvent)).thenReturn(currentPositionInStream);
 
-        final JsonEnvelope event_3 = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(3L),
-                createObjectBuilder()
-        );
+        when(eventOrderResolver.incomingEventObsolete(incomingEvent, currentPositionInStream)).thenReturn(false);
+        when(eventOrderResolver.incomingEventNotInOrder(incomingEvent, currentPositionInStream)).thenReturn(true);
 
-        assertThat(bufferService.currentOrderedEventsWith(event_3, EVENT_LISTENER), is(empty()));
+        final Stream<JsonEnvelope> bufferedEvents = consecutiveEventBufferService.currentOrderedEventsWith(incomingEventEnvelope, component);
+        assertThat(bufferedEvents.count(), is(0L));
 
-        final JsonEnvelope event_4 = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(4L),
-                createObjectBuilder()
-        );
-
-        assertThat(bufferService.currentOrderedEventsWith(event_4, EVENT_LISTENER), is(empty()));
-
-        verifyZeroInteractions(streamBufferRepository);
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-        
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, EVENT_LISTENER);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, EVENT_LISTENER));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, EVENT_LISTENER);
-
+        verify(eventBufferAccessor).addToBuffer(incomingEvent);
     }
 
     @Test
-    public void shouldReturnEventThatIsInCorrectOrder() {
-        final UUID streamId = randomUUID();
-        final String source = "source";
-        final String eventName = "source.event.name";
-        final String component = EVENT_LISTENER;
+    public void shouldReturnEmptyAndIgnoreTheEventIfTheIncomingEventIsObsolete() throws Exception {
 
-        final Subscription subscription = mock(Subscription.class);
+        final String component = "EVENT_LISTENER";
+        final long currentPositionInStream = 23;
 
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, component)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(4L);
+        final JsonEnvelope incomingEventEnvelope = mock(JsonEnvelope.class);
+        final IncomingEvent incomingEvent = mock(IncomingEvent.class);
 
-        when(streamBufferRepository.findStreamByIdSourceAndComponent(streamId, source, component)).thenReturn(Stream.empty());
+        when(incomingEventConverter.asIncomingEvent(incomingEventEnvelope, component)).thenReturn(incomingEvent);
+        when(currentPositionProvider.getCurrentPositionInStream(incomingEvent)).thenReturn(currentPositionInStream);
 
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(5L),
-                createObjectBuilder()
-        );
+        when(eventOrderResolver.incomingEventObsolete(incomingEvent, currentPositionInStream)).thenReturn(true);
 
-        final Stream<JsonEnvelope> returnedEvents = bufferService.currentOrderedEventsWith(incomingEvent, component);
-        assertThat(returnedEvents, contains(incomingEvent));
+        final Stream<JsonEnvelope> bufferedEvents = consecutiveEventBufferService.currentOrderedEventsWith(incomingEventEnvelope, component);
+        assertThat(bufferedEvents.count(), is(0L));
 
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, component));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, component);
-
-    }
-
-    @Test
-    public void shouldIncrementVersionOnIncomingEventInCorrectOrder() {
-        final UUID streamId = UUID.fromString("8d104aa3-6ea5-4569-8730-4231e5faaaaa");
-
-        final String source = "source";
-        final String component = EVENT_LISTENER;
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName("source.event-name").withSource(source).withStreamId(streamId).withPosition(5L),
-                createObjectBuilder()
-        );
-
-        final Subscription subscription = mock(Subscription.class);
-
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, component)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(4L);
-        when(streamBufferRepository.findStreamByIdSourceAndComponent(streamId, source, component)).thenReturn(Stream.empty());
-
-        bufferService.currentOrderedEventsWith(incomingEvent, component);
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, component));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).update(new Subscription(streamId, 5L, source, component));
-
-    }
-
-    @Test
-    public void shouldStoreEventIncomingNotInOrderAndReturnEmpty() {
-        final String eventName = "source.events.something.happened";
-        final String source = "source";
-        final UUID streamId = randomUUID();
-
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(6L),
-                createObjectBuilder()
-        );
-
-        final Subscription subscription = mock(Subscription.class);
-
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, EVENT_LISTENER)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(4L);
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, EVENT_LISTENER)).thenReturn(of(new Subscription(streamId, 4L, source, EVENT_LISTENER)));
-
-        when(jsonObjectEnvelopeConverter.asJsonString(incomingEvent)).thenReturn("someStringRepresentation");
-
-        final Stream<JsonEnvelope> returnedEvents = bufferService.currentOrderedEventsWith(incomingEvent, EVENT_LISTENER);
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository, streamBufferRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, EVENT_LISTENER);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, EVENT_LISTENER));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, EVENT_LISTENER);
-        inOrder.verify(streamBufferRepository).insert(new EventBufferEvent(streamId, 6L, "someStringRepresentation", source, EVENT_LISTENER));
-
-        assertThat(returnedEvents, empty());
-    }
-
-    @Test
-    public void shouldReturnConsecutiveBufferedEventsIfIncomingEventFillsTheVersionGap() {
-
-        final UUID streamId = randomUUID();
-        final String source = "source";
-        final String eventName = "source.event.name";
-        final String component = EVENT_LISTENER;
-
-        final Subscription subscription = mock(Subscription.class);
-
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, component)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(2L);
-
-        when(streamBufferRepository.findStreamByIdSourceAndComponent(streamId, source, component)).thenReturn(
-                Stream.of(new EventBufferEvent(streamId, 4L, "someEventContent4", "source_4", component),
-                        new EventBufferEvent(streamId, 5L, "someEventContent5", "source_5", component),
-                        new EventBufferEvent(streamId, 6L, "someEventContent6", "source_6", component),
-                        new EventBufferEvent(streamId, 8L, "someEventContent8", "source_8", component),
-                        new EventBufferEvent(streamId, 9L, "someEventContent9", "source_9", component),
-                        new EventBufferEvent(streamId, 10L, "someEventContent10", "source_10", component),
-                        new EventBufferEvent(streamId, 11L, "someEventContent11", "source_11", component)));
-
-        final JsonEnvelope bufferedEvent4 = mock(JsonEnvelope.class);
-        final JsonEnvelope bufferedEvent5 = mock(JsonEnvelope.class);
-        final JsonEnvelope bufferedEvent6 = mock(JsonEnvelope.class);
-
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent4")).thenReturn(bufferedEvent4);
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent5")).thenReturn(bufferedEvent5);
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent6")).thenReturn(bufferedEvent6);
-
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(3L),
-                createObjectBuilder()
-        );
-
-        final Stream<JsonEnvelope> returnedEvents = bufferService.currentOrderedEventsWith(incomingEvent, component);
-        assertThat(returnedEvents, contains(incomingEvent, bufferedEvent4, bufferedEvent5, bufferedEvent6));
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, component));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, component);
-
-    }
-
-    @Test
-    public void shoulCloseSourceStreamOnConsecutiveStreamClose() {
-
-        final UUID streamId = randomUUID();
-        final String source = "source";
-        final String eventName = "source.event.name";
-        final String component = EVENT_LISTENER;
-
-        final Subscription subscription = mock(Subscription.class);
-
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, component)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(2L);
-
-        final StreamCloseSpy sourceStreamSpy = new StreamCloseSpy();
-
-        when(streamBufferRepository.findStreamByIdSourceAndComponent(streamId, source, component)).thenReturn(
-                Stream.of(new EventBufferEvent(streamId, 4L, "someEventContent4", source, component),
-                        new EventBufferEvent(streamId, 8L, "someEventContent8", source, component)).onClose(sourceStreamSpy)
-        );
-
-        final JsonEnvelope bufferedEvent4 = mock(JsonEnvelope.class);
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent4")).thenReturn(bufferedEvent4);
-
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(3L),
-                createObjectBuilder()
-        );
-
-        final Stream<JsonEnvelope> returnedEvents = bufferService.currentOrderedEventsWith(incomingEvent, component);
-        returnedEvents.close();
-
-        assertThat(sourceStreamSpy.streamClosed(), is(true));
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, component));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, component);
-
-    }
-
-    @Test
-    public void shouldRemoveEventsFromBufferOnceStreamed() {
-
-        final UUID streamId = randomUUID();
-        final String source = "source";
-        final String eventName = "source.event.name";
-        final String component = EVENT_LISTENER;
-
-        final Subscription subscription = mock(Subscription.class);
-
-        when(streamStatusJdbcRepository.findByStreamIdAndSource(streamId, source, component)).thenReturn(of(subscription));
-        when(subscription.getPosition()).thenReturn(2L);
-
-
-        final EventBufferEvent event4 = new EventBufferEvent(streamId, 4L, "someEventContent4", "source_1", component);
-        final EventBufferEvent event5 = new EventBufferEvent(streamId, 5L, "someEventContent5", "source_2", component);
-        final EventBufferEvent event6 = new EventBufferEvent(streamId, 6L, "someEventContent6", "source_3", component);
-
-        when(streamBufferRepository.findStreamByIdSourceAndComponent(streamId, source, component)).thenReturn(
-                Stream.of(event4, event5, event6));
-
-        final JsonEnvelope bufferedEvent4 = mock(JsonEnvelope.class);
-        final JsonEnvelope bufferedEvent5 = mock(JsonEnvelope.class);
-        final JsonEnvelope bufferedEvent6 = mock(JsonEnvelope.class);
-
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent4")).thenReturn(bufferedEvent4);
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent5")).thenReturn(bufferedEvent5);
-        when(jsonObjectEnvelopeConverter.asEnvelope("someEventContent6")).thenReturn(bufferedEvent6);
-
-        final JsonEnvelope incomingEvent = envelopeFrom(
-                metadataBuilder().withId(randomUUID()).withName(eventName).withStreamId(streamId).withPosition(3L),
-                createObjectBuilder()
-        );
-
-        final Stream<JsonEnvelope> returnedEvents = bufferService.currentOrderedEventsWith(incomingEvent, component);
-
-        assertThat(returnedEvents, contains(incomingEvent, bufferedEvent4, bufferedEvent5, bufferedEvent6));
-
-        final InOrder inOrder = inOrder(streamStatusJdbcRepository);
-
-        inOrder.verify(streamStatusJdbcRepository).updateSource(streamId, source, component);
-        inOrder.verify(streamStatusJdbcRepository).insertOrDoNothing(new Subscription(streamId, 0L, source, component));
-        inOrder.verify(streamStatusJdbcRepository).findByStreamIdAndSource(streamId, source, component);
-
-        verify(streamBufferRepository).remove(event4);
-        verify(streamBufferRepository).remove(event5);
-        verify(streamBufferRepository).remove(event6);
+        verify(logger).warn("Message : {} is an obsolete version", incomingEvent);
+        verifyZeroInteractions(eventBufferAccessor);
     }
 }

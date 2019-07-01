@@ -73,17 +73,17 @@ public class EventBufferJdbcRepository {
         }
     }
 
-    public Stream<EventBufferEvent> findStreamByIdSourceAndComponent(final UUID id, final String source, final String component) {
+    public Stream<EventBufferEvent> findStreamByIdSourceAndComponent(final UUID streamId, final String source, final String component) {
         try {
             final PreparedStatementWrapper ps = preparedStatementWrapperFactory.preparedStatementWrapperOf(dataSource, SELECT_STREAM_BUFFER_BY_STREAM_ID_SOURCE_AND_COMPONENT);
-            ps.setObject(1, id);
+            ps.setObject(1, streamId);
             ps.setString(2, source);
             ps.setString(3, component);
 
             return jdbcResultSetStreamer.streamOf(ps, entityFromFunction());
 
-        } catch (SQLException e) {
-            throw new JdbcRepositoryException(format("Exception while returning buffered events, streamId: %s", id), e);
+        } catch (final SQLException e) {
+            throw new JdbcRepositoryException(format("Exception while returning buffered events, streamId: %s", streamId), e);
         }
     }
 
@@ -95,7 +95,7 @@ public class EventBufferJdbcRepository {
             ps.setString(3, eventBufferEvent.getSource());
             ps.setString(4, eventBufferEvent.getComponent());
             ps.executeUpdate();
-        } catch (SQLException e) {
+        } catch (final SQLException e) {
             throw new JdbcRepositoryException(format("Exception while removing event from the buffer: %s", eventBufferEvent), e);
         }
 
