@@ -2,22 +2,22 @@ dist: trusty
 sudo: required
 language: java
 jdk:
-- oraclejdk8
+  - oraclejdk8
 git:
   depth: 3
 cache:
   directories:
-  - "$HOME/.m2"
+    - "$HOME/.m2"
 services:
-- postgresql
+  - postgresql
 before_script:
-- psql -c 'create database frameworkeventstore;' -U postgres
-- psql -c 'create database frameworkviewstore;' -U postgres
-- psql -c 'create database frameworkfilestore;' -U postgres
-- psql -c 'create database frameworksystem;' -U postgres
-- psql -c 'create database fileservice;' -U postgres
-- psql -c "CREATE USER framework WITH PASSWORD 'framework';" -U postgres
-- psql -c "CREATE USER fileservice WITH PASSWORD 'fileservice';" -U postgres
+  - psql -c 'create database frameworkeventstore;' -U postgres
+  - psql -c 'create database frameworkviewstore;' -U postgres
+  - psql -c 'create database frameworkfilestore;' -U postgres
+  - psql -c 'create database frameworksystem;' -U postgres
+  - psql -c 'create database fileservice;' -U postgres
+  - psql -c "CREATE USER framework WITH PASSWORD 'framework';" -U postgres
+  - psql -c "CREATE USER fileservice WITH PASSWORD 'fileservice';" -U postgres
 addons:
   postgresql: '9.5'
   sonarcloud:
@@ -25,15 +25,14 @@ addons:
     token:
       secure: KqWUD6nqDomQi78/Lr5Nv3LuvPvSEQOsh2mEJfQPP2C2OfEozo8bVPzbEVsL9NvB5sOxcjp7o/4iLZ3X6kg2/aTShCSg74vqHJ3FWPTvwFA5TXptFeHGGrleaEsAeaD9GSgVf3wPjXTtmS42Q6OnLx/nA4ZreDXANczUbwWKyYW0nB0c49Hb53j6gOBzp64VizzggaWh8taWpFPWZCwAXgahY3mnOTftVOfdCh5Pyt3+2fdNZPedX+J4JnHa5yIfFgUFz108hkWVlt4vKnWXhXAPEjvqotEAKnNx45YihjOQQR6z8P7B4ntXqeW5DD3gEo6eTooB36Gi17+FqBLL+eKMd/v6qj/smgCDbrfJgrFSJH80DGTnetX87efzeAiMp7FVbwNetfjlzt85dMJTwwXmqikDvv0f3R70K9R8/mYrSGEVJbwx4paJK0P5buE3ABMGWa7hRWT2mZQs9tBmWrjdR/h0JmMA6Kop04jwxGgX5EAYtfWTLzhsGbtN1Q4FQ8mZkqnTIuVvsOfD7045Zxir9uhKjF0lJ8bIEGjMurbO9lp3ov+0KUHq2zrHU5Y+l9YKwC4jwR7ooUHuwdj5L9K8avhfRixT7Whxm0OngeCcmN+XxrGJy5qEqfHE1I6E7ewP9mwmppedEbJN13bH3b3L5VqW047rBDvrKeYdUHE=
 before_install:
-- git clone https://github.com/CJSCommonPlatform/travis-settings.git target/travis-settings
-- ln -sfT ${PWD}/target/travis-settings/settings.xml ${HOME}/.m2/settings.xml
-- ln -sfT ${PWD}/target/travis-settings/mvnw mvnw
-- ln -sft ${PWD} ${PWD}/target/travis-settings/.mvn
-install: "${PWD}/target/travis-settings/java/install.sh -e -q -DexcludeGroupIds=uk.gov.justice.service,uk.gov.justice.services"
+  - git clone https://github.com/CJSCommonPlatform/travis-settings.git target/travis-settings
+  - ln -sfT ${PWD}/target/travis-settings/settings.xml ${HOME}/.m2/settings.xml
+  - ln -sfT ${PWD}/target/travis-settings/mvnw mvnw
+  - ln -sft ${PWD} ${PWD}/target/travis-settings/.mvn
+install: "${PWD}/target/travis-settings/java/install.sh -e -DexcludeGroupIds=uk.gov.justice.service,uk.gov.justice.services"
 script: "${PWD}/target/travis-settings/java/script-install.sh coveralls:report sonar:sonar"
 after_success: "${PWD}/target/travis-settings/java/after_success.sh"
-notifications: 
 env:
   global:
-  - PGPORT=5432
-  - secure: j9aIMo7+WEaWf+7laaEjsHULJE6U98f16zHleAYGBtZhl8FXJdUgc984G/dUqYGwIsfQnYBlNFKZ2FZ3koQB54VJEXKxhLn3Yt6eM3sbH/7D3CHIiqzQy5P2gH2TzzroH1rN4lUuDRYQXq2Es+5X1pU03cZKrD2j7sJL93GT+c6pH1A66Qyv5wKHj5tJ6nOgUV5TrDKvZCWXeMDFUNoGnXDv7ztkIogcOhFkJJWjBU/CkZCNrhRfV4LKzo2Vu8H9xpqDcfusBJ2TY1vF2mKq3fkfts0LQ5A7FLXukTl3uE2+Qbaq9++/E9e9cTkrNlalmBGJavlSVpsGXsPHS7Ny9kwmp1rUmrp++ZdJdnv1JWQ6aD8BryTWRmoTPjY8a2QH6jHm2a8etkKp6MbDAeLdbvEKqMLIU2NfKO6zHZxWL3iCz2/YwMIF8gG+Yaj0EMe4BazFLkowdHiwbXMpcwtRLzEIaD4DF1RXOLkr8tMcHRAo9uRNcaG0qup/4MtkeKX2xnukud4WK5pDpTLYYqcgP7TpnEAoB/zrM6Y9JxUMUP7sqjfHi4SJFqXnKcSPMtfN5GuEL9b1559ApINRiyvDnyQOREvAJxqt17Z54FgJ4q9zkBlaOAZUCxlAmBa/vnzXN0MbVNmo9qWdpJHbARefmWfX7R/8vimWZy8jC1BqQTw=
+    - PGPORT=5432
+    - secure: j9aIMo7+WEaWf+7laaEjsHULJE6U98f16zHleAYGBtZhl8FXJdUgc984G/dUqYGwIsfQnYBlNFKZ2FZ3koQB54VJEXKxhLn3Yt6eM3sbH/7D3CHIiqzQy5P2gH2TzzroH1rN4lUuDRYQXq2Es+5X1pU03cZKrD2j7sJL93GT+c6pH1A66Qyv5wKHj5tJ6nOgUV5TrDKvZCWXeMDFUNoGnXDv7ztkIogcOhFkJJWjBU/CkZCNrhRfV4LKzo2Vu8H9xpqDcfusBJ2TY1vF2mKq3fkfts0LQ5A7FLXukTl3uE2+Qbaq9++/E9e9cTkrNlalmBGJavlSVpsGXsPHS7Ny9kwmp1rUmrp++ZdJdnv1JWQ6aD8BryTWRmoTPjY8a2QH6jHm2a8etkKp6MbDAeLdbvEKqMLIU2NfKO6zHZxWL3iCz2/YwMIF8gG+Yaj0EMe4BazFLkowdHiwbXMpcwtRLzEIaD4DF1RXOLkr8tMcHRAo9uRNcaG0qup/4MtkeKX2xnukud4WK5pDpTLYYqcgP7TpnEAoB/zrM6Y9JxUMUP7sqjfHi4SJFqXnKcSPMtfN5GuEL9b1559ApINRiyvDnyQOREvAJxqt17Z54FgJ4q9zkBlaOAZUCxlAmBa/vnzXN0MbVNmo9qWdpJHbARefmWfX7R/8vimWZy8jC1BqQTw=

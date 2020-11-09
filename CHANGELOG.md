@@ -5,6 +5,10 @@ on [Keep a CHANGELOG](http://keepachangelog.com/). This project adheres to
 
 ## [Unreleased]
 
+## [7.2.0-M5] - 2020-11-09
+### Changed
+- Test release to test the migration from `https://travis-ci.org/` to `https://travis-ci.com/` 
+
 ## [7.2.0-M4] - 2020-11-04
 ### Changed
 - Moved timer bean utilities to framework-libraries
